@@ -1,6 +1,5 @@
 from IMPORTS import *
 metadata = r"C:\Users\Emma\OneDrive - Noroff Education AS\3. Året\Bachelor\Sign Language Health\helse_ordliste_mod.xlsx"
-resized_folder = r"C:\Users\Emma\OneDrive - Noroff Education AS\3. Året\Bachelor\Sign Language Health\fixed_resized_frames"
 aug_folder = r"C:\Users\Emma\OneDrive - Noroff Education AS\3. Året\Bachelor\Sign Language Health\aug_videos"
 zero_pad_resized = r"C:\Users\Emma\OneDrive - Noroff Education AS\3. Året\Bachelor\Sign Language Health\vid_zeropad_resized"
 
@@ -26,7 +25,7 @@ def horizontal_flip(video):
 def adjust_contrast(video, factor):
     return video.fx(mp.vfx.lum_contrast, contrast=factor)
 
-def process_videos():
+def process_augmentation():
     for _, row in df.iterrows():
         term = row["Health_Term"]
         video_file = row["Video_File"]
@@ -69,135 +68,46 @@ def load_video(video_path):
         ret, frame = cap.read()
         if not ret:
             break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR → RGB
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) 
         frames.append(frame)
     cap.release()
-    return np.array(frames)  # Shape: (num_frames, H, W, C)
-
-def uniform_sample_video(video, T=50):
-    num_frames = video.shape[0]
-    if num_frames < T:
-        indices = np.linspace(0, num_frames - 1, num_frames).astype(int)
-        extra_indices = np.random.choice(indices, T - num_frames, replace=True)
-        indices = np.concatenate([indices, extra_indices])
-    else:
-        indices = np.linspace(0, num_frames - 1, T).astype(int)
-    return video[indices]
-
-
-'''def resize_frames(video, target_size=(128, 128)):
-    return np.array([cv2.resize(frame, target_size, interpolation=cv2.INTER_LANCZOS4) for frame in video])
-
-
-def save_video_to_folder(video, output_path, term_name, video_id):
-    term_folder = os.path.join(output_path, term_name)
-    os.makedirs(term_folder, exist_ok=True)
-    video_path = os.path.join(term_folder, f"{video_id}.mp4")
-
-    video = video.astype(np.uint8)
-    height, width, _ = video[0].shape
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-    out = cv2.VideoWriter(video_path, fourcc, 30.0, (width, height))
-
-    for frame in video:
-        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        out.write(frame_bgr)
-
-    out.release()
-    print(f"Video saved to {video_path}")
-
-
-
-def process_augmented_videos(aug_folder, output_folder, T=80, target_size=(128, 128)):
-    for term_name in os.listdir(aug_folder):
-        term_folder = os.path.join(aug_folder, term_name)
-        if os.path.isdir(term_folder):
-            for video_id in os.listdir(term_folder):
-                video_path = os.path.join(term_folder, video_id)
-                if video_path.endswith('.mp4'):
-                    video = load_video(video_path)
-                    video_resampled = uniform_sample_video(video, T)
-                    video_resized = resize_frames(video_resampled, target_size)
-                    save_video_to_folder(video_resized, output_folder, term_name, video_id.split('.')[0])'''
-
-# Run Augmentation and Processing
-#process_videos()
-#process_augmented_videos(aug_folder, resized_folder, T=80, target_size=(128, 128))
-
-'''# Load and process resized videos for training
-def load_videos_from_folder(folder_path, T=80):
-    features = []
-    labels = []
-    for term_name in os.listdir(folder_path):
-        term_folder = os.path.join(folder_path, term_name)
-        if os.path.isdir(term_folder):
-            for video_id in os.listdir(term_folder):
-                video_path = os.path.join(term_folder, video_id)
-                if video_path.endswith('.mp4'):
-                    video = load_video(video_path)
-                    video_resampled = uniform_sample_video(video, T)  # Uniformly sample frames
-                    features.append(video_resampled)
-                    labels.append(term_name)  # The label is the folder name (sign term)
-    
-    return np.array(features), np.array(labels)
-
-X, y = load_videos_from_folder(zero_pad_resized, T=80)
-np.save('processed_features.npy', X)
-np.save('processed_labels.npy', y)
-
-print(X.shape)'''
-
-
+    return np.array(frames)  
 
 
 target_size = (128, 128)
-T = 80  
+target_frames = 117  
 
-def load_video(path):
-    cap = cv2.VideoCapture(path)
-    frames = []
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frames.append(frame)
-    cap.release()
-    return frames
+def resize_frames(video, target_size):
+    resized_frames = [cv2.resize(frame, target_size, interpolation=cv2.INTER_LANCZOS4) for frame in video]
+    print(f"Resized {len(resized_frames)} frames")
+    return resized_frames
 
-
-def resize_frames(video, target_size=(128, 128)):
-    return [cv2.resize(frame, target_size, interpolation=cv2.INTER_LANCZOS4) for frame in video]
-
-
-def zero_pad_frames(frames, target_frame_count=80):
+def zero_pad_frames(frames, target_frames):
     frame_count = len(frames)
-    if frame_count > target_frame_count:
-        step = max(frame_count // target_frame_count, 1)  
-        result = [frames[i] for i in range(0, frame_count, step)]
-        # Ensure we do not exceed the target frame count
-        if len(result) > target_frame_count:
-            result = result[:target_frame_count]
-        print(f"[INFO] Downsampling: {frame_count} -> {len(result)} frames")  
-        return result
-    elif frame_count < target_frame_count:
-        padding = [np.zeros_like(frames[0], dtype=np.uint8) for _ in range(target_frame_count - frame_count)]
+    print(f"Original frame count: {frame_count}")
+
+    if frame_count < target_frames:
+        padding = [np.zeros_like(frames[0], dtype=np.uint8) for _ in range(target_frames - frame_count)]
         result = frames + padding
-        print(f"[INFO] Padding: {frame_count} -> {len(result)} frames")  
+        print(f"Padded to: {len(result)} frames") 
         return result
+    elif frame_count > target_frames:
+        print(f"WARNING: Video has more than {target_frames} frames. Trimming to {target_frames} frames.")
+        return frames[:target_frames] 
     else:
+        print(f"No padding needed, video already has {frame_count} frames.")
         return frames
 
 
-
-def save_video_to_folder(video_frames, output_path, term_name, video_id):
+def save_video_to_folder(video_frames, output_path, term_name, video_id, fps=25):
     term_folder = os.path.join(output_path, term_name)
     os.makedirs(term_folder, exist_ok=True)
     save_path = os.path.join(term_folder, f"{video_id}.mp4")
 
     height, width, _ = video_frames[0].shape
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(save_path, fourcc, 10.0, (width, height))  
+    out = cv2.VideoWriter(save_path, fourcc, fps, (width, height))  
+    
     for frame in video_frames:
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         out.write(frame_bgr)
@@ -206,7 +116,7 @@ def save_video_to_folder(video_frames, output_path, term_name, video_id):
     print(f"Saved: {save_path}")
 
 
-def process_videos(aug_folder, output_folder, target_size=(128, 128), target_frames=80):
+def process_resize_pad(aug_folder, output_folder, target_size, target_frames):
     total_videos = 0
     for term_name in os.listdir(aug_folder):
         term_path = os.path.join(aug_folder, term_name)
@@ -217,14 +127,16 @@ def process_videos(aug_folder, output_folder, target_size=(128, 128), target_fra
                     frames = load_video(video_path)
 
                     if len(frames) == 0:
-                        print(f"[ERROR] Could not read frames from {video_path}")
+                        print(f"ERROR: Could not read frames from {video_path}")
                         continue
+
+                    print(f"Processing video: {video_file}, Frame count before resize: {len(frames)}")
 
                     resized = resize_frames(frames, target_size)
                     padded = zero_pad_frames(resized, target_frames)
 
                     if len(padded) != target_frames:
-                        print(f"[WARNING] {video_path} ended up with {len(padded)} frames!")
+                        print(f"WARNING: {video_path} ended up with {len(padded)} frames! Skipping this video.")
                         continue 
 
                     video_id = os.path.splitext(video_file)[0]
@@ -233,4 +145,10 @@ def process_videos(aug_folder, output_folder, target_size=(128, 128), target_fra
 
     print(f"\nDone processing {total_videos} videos into '{output_folder}' folder.")
 
-#process_videos(aug_folder, zero_pad_resized, target_size, T)
+
+
+# Run Augmentation
+#process_augmentation()
+
+# Run Resizing and Padding
+#process_resize_pad(aug_folder, zero_pad_resized, target_size, target_frames)
